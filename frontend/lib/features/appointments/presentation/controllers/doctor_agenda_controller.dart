@@ -80,12 +80,18 @@ class DoctorAgendaController extends Notifier<DoctorAgendaState> {
       return;
     }
 
+    final effectiveDate = state.selectedDate ?? DateTime.now();
+    if (state.selectedDate == null) {
+      state = state.copyWith(selectedDate: effectiveDate);
+    }
+
     state = state.copyWith(isLoading: true, clearError: true, clearSuccess: true);
     try {
-      final data = await _repository.fetchAppointments(
+      final data = await _repository.fetchAppointmentsForDoctor(
+        date: _formatDate(effectiveDate)!,
+        state: _mapStateFilter(state.selectedStatus),
         doctorId: auth.profileId,
-        date: _formatDate(state.selectedDate),
-        status: state.selectedStatus,
+        order: 'desc',
       );
       state = state.copyWith(isLoading: false, agenda: data);
     } catch (error) {
@@ -199,4 +205,17 @@ String? _formatDate(DateTime? date) {
   final month = date.month.toString().padLeft(2, '0');
   final day = date.day.toString().padLeft(2, '0');
   return '$year-$month-$day';
+}
+
+int? _mapStateFilter(String? selectedStatus) {
+  switch (selectedStatus) {
+    case 'pending':
+      return 1;
+    case 'completed':
+      return 2;
+    case 'cancelled':
+      return 3;
+    default:
+      return int.tryParse(selectedStatus ?? '');
+  }
 }

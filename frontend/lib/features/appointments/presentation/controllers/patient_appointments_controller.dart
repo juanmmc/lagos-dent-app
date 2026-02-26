@@ -101,7 +101,10 @@ class PatientAppointmentsController extends Notifier<PatientAppointmentsState> {
 
     try {
       final results = await Future.wait([
-        _repository.fetchAppointments(patientId: auth.profileId),
+        _repository.fetchAppointmentsForPatient(
+          patientId: auth.profileId,
+          order: 'desc',
+        ),
         _repository.fetchDoctors(),
       ]);
 
@@ -191,7 +194,10 @@ class PatientAppointmentsController extends Notifier<PatientAppointmentsState> {
             : state.paymentReference.trim(),
       );
 
-      final updated = await _repository.fetchAppointments(patientId: auth.profileId);
+      final updated = await _repository.fetchAppointmentsForPatient(
+        patientId: auth.profileId,
+        order: 'desc',
+      );
       state = state.copyWith(
         isSubmitting: false,
         appointments: updated,

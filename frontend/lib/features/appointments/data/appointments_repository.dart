@@ -28,6 +28,30 @@ class AppointmentsRepository {
     );
   }
 
+  Future<List<Appointment>> fetchAppointmentsForPatient({
+    required String patientId,
+    String order = 'desc',
+  }) {
+    return _remote.fetchAppointmentsForPatient(
+      patientId: patientId,
+      order: order,
+    );
+  }
+
+  Future<List<Appointment>> fetchAppointmentsForDoctor({
+    required String date,
+    int? state,
+    String? doctorId,
+    String order = 'desc',
+  }) {
+    return _remote.fetchAppointmentsForDoctor(
+      date: date,
+      state: state,
+      doctorId: doctorId,
+      order: order,
+    );
+  }
+
   Future<List<DoctorOption>> fetchDoctors({String? query}) {
     return _remote.fetchDoctors(query: query);
   }

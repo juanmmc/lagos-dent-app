@@ -15,6 +15,10 @@ class AppointmentsRemoteDataSource {
 
   final Dio _dio;
 
+  static const String _listForPatientPath = '/api/patients/{id}/appointments';
+  static const String _listForDoctorPath = '/api/appointments/listForDoctor';
+  static const String _genericListPath = '/api/appointments';
+
   Future<List<Appointment>> fetchAppointments({
     String? date,
     String? status,
@@ -22,7 +26,7 @@ class AppointmentsRemoteDataSource {
     String? doctorId,
   }) async {
     final response = await _dio.get<dynamic>(
-      '/api/appointments',
+      _genericListPath,
       queryParameters: {
         if (date != null && date.isNotEmpty) 'date': date,
         if (status != null && status.isNotEmpty) 'status': status,
@@ -38,12 +42,56 @@ class AppointmentsRemoteDataSource {
         .toList();
   }
 
+  Future<List<Appointment>> fetchAppointmentsForPatient({
+    required String patientId,
+    String order = 'desc',
+  }) async {
+    final query = {'order': order};
+
+    try {
+      final response = await _dio.get<dynamic>(
+        _listForPatientPath.replaceFirst('{id}', patientId),
+        queryParameters: query,
+      );
+      final list = _extractList(response.data);
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(Appointment.fromJson)
+          .toList();
+    } on DioException {
+      return fetchAppointments(patientId: patientId);
+    }
+  }
+
+  Future<List<Appointment>> fetchAppointmentsForDoctor({
+    required String date,
+    int? state,
+    String? doctorId,
+    String order = 'desc',
+  }) async {
+    final query = <String, dynamic>{'date': date, 'order': order};
+    if (state != null) query['state'] = state;
+    if (doctorId != null && doctorId.isNotEmpty) query['doctor_id'] = doctorId;
+
+    try {
+      final response = await _dio.get<dynamic>(
+        _listForDoctorPath,
+        queryParameters: query,
+      );
+      final list = _extractList(response.data);
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(Appointment.fromJson)
+          .toList();
+    } on DioException {
+      return fetchAppointments(date: date, doctorId: doctorId);
+    }
+  }
+
   Future<List<DoctorOption>> fetchDoctors({String? query}) async {
     final response = await _dio.get<dynamic>(
       '/api/doctors',
-      queryParameters: {
-        if (query != null && query.isNotEmpty) 'q': query,
-      },
+      queryParameters: {if (query != null && query.isNotEmpty) 'q': query},
     );
 
     final list = _extractList(response.data);
