@@ -16,6 +16,7 @@ class AppointmentsRemoteDataSource {
   final Dio _dio;
 
   static const String _listForPatientPath = '/api/patients/{id}/appointments';
+  static const String _associatesForPatientPath = '/api/patients/{id}/associates';
   static const String _listForDoctorPath = '/api/appointments/listForDoctor';
   static const String _genericListPath = '/api/appointments';
 
@@ -106,6 +107,20 @@ class AppointmentsRemoteDataSource {
     final response = await _dio.get<dynamic>(
       '/api/patients',
       queryParameters: {'q': query},
+    );
+
+    final list = _extractList(response.data);
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(PatientOption.fromJson)
+        .toList();
+  }
+
+  Future<List<PatientOption>> fetchAssociatesForPatient({
+    required String patientId,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      _associatesForPatientPath.replaceFirst('{id}', patientId),
     );
 
     final list = _extractList(response.data);

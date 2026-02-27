@@ -178,11 +178,41 @@ class _PatientBookingFlowView extends ConsumerWidget {
                 ),
                 if (state.forAssociatedPatient) ...[
                   const SizedBox(height: 12),
-                  TextField(
-                    onChanged: controller.setAssociatedPatientId,
-                    decoration: const InputDecoration(
-                      labelText: 'ID del paciente asociado',
+                  DropdownButtonFormField<String>(
+                    initialValue:
+                        state.associatedPatients
+                                .where(
+                                  (patient) =>
+                                      patient.id == state.associatedPatientId,
+                                )
+                                .isEmpty
+                            ? null
+                            : state.associatedPatientId,
+                    decoration: InputDecoration(
+                      labelText: 'Paciente asociado',
+                      helperText:
+                          state.associatedPatients.isEmpty
+                              ? 'No se encontraron pacientes asociados para este titular'
+                              : null,
                     ),
+                    items:
+                        state.associatedPatients
+                            .map(
+                              (patient) => DropdownMenuItem<String>(
+                                value: patient.id,
+                                child: Text(
+                                  patient.phone == null || patient.phone!.isEmpty
+                                      ? patient.name
+                                      : '${patient.name} · ${patient.phone}',
+                                ),
+                              ),
+                            )
+                            .toList(),
+                    onChanged:
+                        state.associatedPatients.isEmpty
+                            ? null
+                            : (value) =>
+                                controller.setAssociatedPatientId(value ?? ''),
                   ),
                 ],
               ],

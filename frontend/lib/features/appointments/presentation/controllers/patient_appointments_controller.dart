@@ -16,6 +16,7 @@ class PatientAppointmentsState {
     this.isSubmitting = false,
     this.appointments = const [],
     this.doctors = const [],
+    this.associatedPatients = const [],
     this.selectedDoctorId,
     this.selectedDate,
     this.selectedTime,
@@ -30,6 +31,7 @@ class PatientAppointmentsState {
   final bool isSubmitting;
   final List<Appointment> appointments;
   final List<DoctorOption> doctors;
+  final List<PatientOption> associatedPatients;
   final String? selectedDoctorId;
   final DateTime? selectedDate;
   final TimeOfDay? selectedTime;
@@ -44,6 +46,7 @@ class PatientAppointmentsState {
     bool? isSubmitting,
     List<Appointment>? appointments,
     List<DoctorOption>? doctors,
+    List<PatientOption>? associatedPatients,
     String? selectedDoctorId,
     bool clearSelectedDoctorId = false,
     DateTime? selectedDate,
@@ -63,6 +66,7 @@ class PatientAppointmentsState {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       appointments: appointments ?? this.appointments,
       doctors: doctors ?? this.doctors,
+        associatedPatients: associatedPatients ?? this.associatedPatients,
       selectedDoctorId:
           clearSelectedDoctorId
               ? null
@@ -106,12 +110,14 @@ class PatientAppointmentsController extends Notifier<PatientAppointmentsState> {
           order: 'desc',
         ),
         _repository.fetchDoctors(),
+        _repository.fetchAssociatesForPatient(patientId: auth.profileId),
       ]);
 
       state = state.copyWith(
         isLoading: false,
         appointments: results[0] as List<Appointment>,
         doctors: results[1] as List<DoctorOption>,
+        associatedPatients: results[2] as List<PatientOption>,
         clearError: true,
       );
     } catch (error) {
@@ -144,7 +150,11 @@ class PatientAppointmentsController extends Notifier<PatientAppointmentsState> {
   }
 
   void setAssociatedPatientId(String value) {
-    state = state.copyWith(associatedPatientId: value, clearError: true, clearSuccess: true);
+    state = state.copyWith(
+      associatedPatientId: value,
+      clearError: true,
+      clearSuccess: true,
+    );
   }
 
   void setPaymentReference(String value) {
@@ -171,7 +181,7 @@ class PatientAppointmentsController extends Notifier<PatientAppointmentsState> {
             : auth.profileId;
 
     if (patientId.isEmpty) {
-      state = state.copyWith(error: 'Indica el ID del paciente asociado');
+      state = state.copyWith(error: 'Selecciona un paciente asociado');
       return false;
     }
 
