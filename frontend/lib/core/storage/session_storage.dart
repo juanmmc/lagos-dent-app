@@ -12,6 +12,9 @@ class SessionStorage {
   const SessionStorage(this._storage);
 
   final FlutterSecureStorage _storage;
+  static AuthSession? _cachedSession;
+
+  static AuthSession? get cachedSession => _cachedSession;
 
   static const _tokenKey = 'auth.token';
   static const _roleKey = 'auth.role';
@@ -19,6 +22,7 @@ class SessionStorage {
   static const _profileIdKey = 'auth.profileId';
 
   Future<void> save(AuthSession session) async {
+    _cachedSession = session;
     await _storage.write(key: _tokenKey, value: session.token);
     await _storage.write(key: _roleKey, value: session.role.name);
     await _storage.write(key: _personIdKey, value: session.personId);
@@ -26,6 +30,9 @@ class SessionStorage {
   }
 
   Future<AuthSession?> read() async {
+    final cached = _cachedSession;
+    if (cached != null) return cached;
+
     final token = await _storage.read(key: _tokenKey);
     final role = await _storage.read(key: _roleKey);
     final personId = await _storage.read(key: _personIdKey);
@@ -43,15 +50,19 @@ class SessionStorage {
         .firstOrNull;
     if (parsedRole == null) return null;
 
-    return AuthSession(
+    final session = AuthSession(
       token: token,
       role: parsedRole,
       personId: personId,
       profileId: profileId,
     );
+
+    _cachedSession = session;
+    return session;
   }
 
   Future<void> clear() async {
+    _cachedSession = null;
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _roleKey);
     await _storage.delete(key: _personIdKey);

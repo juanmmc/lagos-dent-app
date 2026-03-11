@@ -21,23 +21,38 @@ class DoctorHomeScreen extends ConsumerStatefulWidget {
 
 class _DoctorHomeScreenState extends ConsumerState<DoctorHomeScreen> {
   int _index = 0;
+  late final ProviderSubscription<DoctorAgendaState> _agendaSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _agendaSubscription = ref.listenManual<DoctorAgendaState>(
+      doctorAgendaControllerProvider,
+      (previous, next) {
+        if (!mounted) return;
+        if (next.error != null && next.error != previous?.error) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(next.error!)));
+        }
+        if (next.success != null && next.success != previous?.success) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(next.success!)));
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _agendaSubscription.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(doctorAgendaControllerProvider);
-
-    ref.listen(doctorAgendaControllerProvider, (previous, next) {
-      if (next.error != null && next.error != previous?.error) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(next.error!)));
-      }
-      if (next.success != null && next.success != previous?.success) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(next.success!)));
-      }
-    });
 
     final pages = [
       _DoctorAgendaView(state: state),
@@ -250,16 +265,25 @@ class _DoctorAppointmentDetailScreenState
       (item) => item.id == widget.appointmentId,
       orElse: () => widget.initialAppointment,
     );
-    final appointment = _detailedAppointment ?? fallbackAppointment;
+    final detailed = _detailedAppointment;
+    final appointment = _shouldPreferAgendaAppointment(
+          agendaAppointment: fallbackAppointment,
+          detailedAppointment: detailed,
+        )
+        ? fallbackAppointment
+        : (detailed ?? fallbackAppointment);
 
     final dateText = DateFormat(
       'dd/MM/yyyy HH:mm',
     ).format(appointment.scheduledAt);
+    final receiptUrl = appointment.depositSlipAttachmentUrl?.trim();
     final receiptPath = appointment.depositSlipAttachmentPath?.trim();
     final receiptMime = appointment.depositSlipAttachmentMime?.trim();
-    final receiptUri = _resolveAttachmentUri(receiptPath);
+    final receiptSource =
+        receiptUrl != null && receiptUrl.isNotEmpty ? receiptUrl : receiptPath;
+    final receiptUri = _resolveAttachmentUri(receiptSource);
     final canPreviewReceipt =
-      receiptUri != null && _isImageAttachment(receiptPath, receiptMime);
+      receiptUri != null && _isImageAttachment(receiptSource, receiptMime);
     final imageHeaders = authToken == null || authToken.isEmpty
       ? null
       : <String, String>{'Authorization': 'Bearer $authToken'};
@@ -371,10 +395,18 @@ class _DoctorAppointmentDetailScreenState
                       'Toca la imagen para verla en grande y hacer zoom',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ] else if (receiptPath != null && receiptPath.isNotEmpty) ...[
+                  ] else if (
+                    receiptSource != null && receiptSource.isNotEmpty
+                  ) ...[
                     const SizedBox(height: 8),
                     const Text(
                       'El comprobante adjunto no es una imagen previsualizable.',
+                    ),
+                  ],
+                  if (appointment.depositSlipAttachmentUrl?.isNotEmpty == true) ...[
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      'URL: ${appointment.depositSlipAttachmentUrl}',
                     ),
                   ],
                   if (appointment.depositSlipAttachmentPath?.isNotEmpty ==
@@ -447,6 +479,7 @@ class _DoctorAppointmentDetailScreenState
                       await controller.confirmAppointment(
                         appointmentId: appointment.id,
                       );
+                      _refreshDetailInBackground();
                     },
               icon: const Icon(Icons.verified_rounded),
               label: const Text('Confirmar cita'),
@@ -467,6 +500,7 @@ class _DoctorAppointmentDetailScreenState
                         appointmentId: appointment.id,
                         reason: reason,
                       );
+                      _refreshDetailInBackground();
                     },
               icon: const Icon(Icons.close_rounded),
               label: const Text('Rechazar cita'),
@@ -509,6 +543,7 @@ class _DoctorAppointmentDetailScreenState
                         recipeAttachmentId: _recipeAttachmentId,
                       );
                       if (!context.mounted) return;
+                      _refreshDetailInBackground();
                       setState(() {
                         _recipeAttachmentId = null;
                         _recipeAttachmentName = null;
@@ -521,9 +556,12 @@ class _DoctorAppointmentDetailScreenState
             OutlinedButton.icon(
               onPressed: agendaState.isActionLoading
                   ? null
-                  : () => controller.markAppointmentAbsent(
-                      appointmentId: appointment.id,
-                    ),
+                  : () async {
+                      await controller.markAppointmentAbsent(
+                        appointmentId: appointment.id,
+                      );
+                      _refreshDetailInBackground();
+                    },
               icon: const Icon(Icons.person_off_rounded),
               label: const Text('Marcar inasistencia'),
             ),
@@ -539,6 +577,7 @@ class _DoctorAppointmentDetailScreenState
                         newScheduledAt: reschedule.$1,
                         reason: reschedule.$2,
                       );
+                      _refreshDetailInBackground();
                     },
               icon: const Icon(Icons.update_rounded),
               label: const Text('Reprogramar cita'),
@@ -603,37 +642,64 @@ class _DoctorAppointmentDetailScreenState
     }
   }
 
+  void _refreshDetailInBackground() {
+    if (!mounted || _isLoadingDetail) return;
+    Future<void>.microtask(_loadAppointmentDetail);
+  }
+
+  bool _shouldPreferAgendaAppointment({
+    required Appointment agendaAppointment,
+    required Appointment? detailedAppointment,
+  }) {
+    if (detailedAppointment == null) return true;
+
+    final detailedValue = detailedAppointment.statusValue;
+    final agendaValue = agendaAppointment.statusValue;
+    if (detailedValue != null && agendaValue != null) {
+      return detailedValue != agendaValue;
+    }
+
+    final detailedStatus = detailedAppointment.statusDescriptor
+        .trim()
+        .toLowerCase();
+    final agendaStatus = agendaAppointment.statusDescriptor.trim().toLowerCase();
+    return detailedStatus != agendaStatus;
+  }
+
   Uri? _resolveAttachmentUri(String? rawPath) {
     if (rawPath == null || rawPath.isEmpty) return null;
 
     final parsed = Uri.tryParse(rawPath);
     if (parsed != null && parsed.hasScheme) {
-      if (kDebugMode) {
-        debugPrint('🧾 [RECEIPT] rawPath=$rawPath (absolute)');
-        debugPrint('🧾 [RECEIPT] resolvedUrl=${parsed.toString()}');
-      }
-      return parsed;
+      final rewritten = _rewriteLocalhostUriIfNeeded(parsed);
+      return rewritten;
     }
 
     final base = Uri.tryParse(AppConfig.apiBaseUrl);
     if (base == null) {
-      if (kDebugMode) {
-        debugPrint('🧾 [RECEIPT] rawPath=$rawPath');
-        debugPrint('🧾 [RECEIPT] baseUrl inválida: ${AppConfig.apiBaseUrl}');
-      }
       return null;
     }
 
     final normalizedPath = _normalizeAttachmentPath(rawPath);
     final resolved = base.resolveUri(Uri.parse(normalizedPath));
 
-    if (kDebugMode) {
-      debugPrint('🧾 [RECEIPT] rawPath=$rawPath');
-      debugPrint('🧾 [RECEIPT] normalizedPath=$normalizedPath');
-      debugPrint('🧾 [RECEIPT] resolvedUrl=${resolved.toString()}');
+    return resolved;
+  }
+
+  Uri _rewriteLocalhostUriIfNeeded(Uri uri) {
+    final host = uri.host.toLowerCase();
+    if (host != 'localhost' && host != '127.0.0.1') {
+      return uri;
     }
 
-    return resolved;
+    final base = Uri.tryParse(AppConfig.apiBaseUrl);
+    if (base == null || base.host.isEmpty) return uri;
+
+    return uri.replace(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : uri.port,
+    );
   }
 
   String _normalizeAttachmentPath(String rawPath) {
@@ -749,14 +815,14 @@ Future<String?> _askRequiredText(
   required String label,
   required String confirmText,
 }) async {
-  final textController = TextEditingController();
+  String currentValue = '';
 
   final result = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
       content: TextField(
-        controller: textController,
+        onChanged: (value) => currentValue = value,
         maxLines: 3,
         decoration: InputDecoration(labelText: label),
       ),
@@ -767,7 +833,7 @@ Future<String?> _askRequiredText(
         ),
         FilledButton(
           onPressed: () {
-            final value = textController.text.trim();
+            final value = currentValue.trim();
             if (value.isEmpty) return;
             Navigator.of(context).pop(value);
           },
@@ -776,15 +842,13 @@ Future<String?> _askRequiredText(
       ],
     ),
   );
-
-  textController.dispose();
   return result;
 }
 
 Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
   DateTime? selectedDate;
   TimeOfDay? selectedTime;
-  final reasonController = TextEditingController();
+  String reasonValue = '';
 
   final value = await showDialog<(DateTime, String?)>(
     context: context,
@@ -833,7 +897,7 @@ Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
             ),
             const SizedBox(height: 8),
             TextField(
-              controller: reasonController,
+              onChanged: (value) => reasonValue = value,
               maxLines: 3,
               decoration: const InputDecoration(labelText: 'Motivo (opcional)'),
             ),
@@ -854,7 +918,7 @@ Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
                 selectedTime!.hour,
                 selectedTime!.minute,
               );
-              final reason = reasonController.text.trim();
+              final reason = reasonValue.trim();
               Navigator.of(
                 context,
               ).pop((datetime, reason.isEmpty ? null : reason));
@@ -865,8 +929,6 @@ Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
       ),
     ),
   );
-
-  reasonController.dispose();
   return value;
 }
 

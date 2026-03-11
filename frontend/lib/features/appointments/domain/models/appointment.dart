@@ -13,6 +13,7 @@ class Appointment {
     this.prescription,
     this.paymentReference,
     this.depositSlipAttachmentId,
+    this.depositSlipAttachmentUrl,
     this.depositSlipAttachmentPath,
     this.depositSlipAttachmentMime,
     this.recipeAttachmentId,
@@ -34,6 +35,7 @@ class Appointment {
   final String? prescription;
   final String? paymentReference;
   final String? depositSlipAttachmentId;
+  final String? depositSlipAttachmentUrl;
   final String? depositSlipAttachmentPath;
   final String? depositSlipAttachmentMime;
   final String? recipeAttachmentId;
@@ -130,6 +132,11 @@ class Appointment {
       ),
       depositSlipAttachmentId: _nullableString(
         json['deposit_slip_attachment_id'] ?? json['depositSlipAttachmentId'],
+      ),
+      depositSlipAttachmentUrl: _nullableString(
+        json['deposit_slip_attachment_url'] ??
+            json['depositSlipAttachmentUrl'] ??
+            json['deposit_slip_attachment']?['url'],
       ),
       depositSlipAttachmentPath: _nullableString(
         json['deposit_slip_attachment_path'] ??

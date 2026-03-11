@@ -19,10 +19,24 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
-        final session = await sessionStorage.read();
-        if (session != null) {
-          options.headers['Authorization'] = 'Bearer ${session.token}';
+        if (kDebugMode) {
+          debugPrint('➡️ [API] preparing ${options.method} ${options.uri}');
         }
+
+        try {
+          final session = await sessionStorage
+              .read()
+              .timeout(const Duration(seconds: 2));
+          if (session != null) {
+            options.headers['Authorization'] = 'Bearer ${session.token}';
+          }
+        } catch (error) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [API] token read failed: $error');
+          }
+          // Continue without blocking request dispatch.
+        }
+
         if (kDebugMode) {
           debugPrint('➡️ [API] ${options.method} ${options.uri}');
         }

@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/config/app_config.dart';
+import '../../../appointments/data/appointments_repository.dart';
 import '../../../appointments/domain/models/appointment.dart';
 import '../../../appointments/presentation/controllers/patient_appointments_controller.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
@@ -22,6 +24,15 @@ class PatientHomeScreen extends ConsumerStatefulWidget {
 class _PatientHomeScreenState extends ConsumerState<PatientHomeScreen> {
   static const String _bookingSuccessMessage = 'Cita agendada correctamente';
   int _index = 0;
+
+  Future<void> _onDestinationSelected(int value) async {
+    setState(() => _index = value);
+    if (value == 0) {
+      await ref
+          .read(patientAppointmentsControllerProvider.notifier)
+          .loadInitialData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +82,7 @@ class _PatientHomeScreenState extends ConsumerState<PatientHomeScreen> {
       body: pages[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: _onDestinationSelected,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -466,18 +477,43 @@ void _showAppointmentDetail(BuildContext context, Appointment appointment) {
   );
 }
 
-class _PatientAppointmentDetailScreen extends StatelessWidget {
+class _PatientAppointmentDetailScreen extends ConsumerStatefulWidget {
   const _PatientAppointmentDetailScreen({required this.appointment});
 
   final Appointment appointment;
 
   @override
+  ConsumerState<_PatientAppointmentDetailScreen> createState() =>
+      _PatientAppointmentDetailScreenState();
+}
+
+class _PatientAppointmentDetailScreenState
+    extends ConsumerState<_PatientAppointmentDetailScreen> {
+  bool _isLoadingDetail = false;
+  Appointment? _detailedAppointment;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_loadAppointmentDetail);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final appointment = _detailedAppointment ?? widget.appointment;
     final dateText = DateFormat(
       'dd/MM/yyyy HH:mm',
     ).format(appointment.scheduledAt);
     final doctorText =
         appointment.doctorName ?? 'Doctor #${appointment.doctorId}';
+    final receiptUrl = appointment.depositSlipAttachmentUrl?.trim();
+    final receiptPath = appointment.depositSlipAttachmentPath?.trim();
+    final receiptMime = appointment.depositSlipAttachmentMime?.trim();
+    final receiptSource =
+      receiptUrl != null && receiptUrl.isNotEmpty ? receiptUrl : receiptPath;
+    final receiptUri = _resolveAttachmentUri(receiptSource);
+    final canPreviewReceipt =
+      receiptUri != null && _isImageAttachment(receiptSource, receiptMime);
     final diagnosisText = appointment.diagnosis?.trim().isNotEmpty == true
         ? appointment.diagnosis!.trim()
         : 'Pendiente';
@@ -490,6 +526,11 @@ class _PatientAppointmentDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_isLoadingDetail)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(),
+            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -514,6 +555,90 @@ class _PatientAppointmentDetailScreen extends StatelessWidget {
                     label: 'Estado',
                     value: appointment.statusDescriptor,
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comprobante de pago',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    appointment.depositSlipAttachmentId?.isNotEmpty == true
+                        ? 'Adjunto ID: ${appointment.depositSlipAttachmentId}'
+                        : 'No hay comprobante adjunto en esta cita.',
+                  ),
+                  if (canPreviewReceipt) ...[
+                    const SizedBox(height: 12),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _showReceiptPreview(
+                        context: context,
+                        imageUrl: receiptUri.toString(),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: AspectRatio(
+                          aspectRatio: 16 / 10,
+                          child: Image.network(
+                            receiptUri.toString(),
+                            fit: BoxFit.cover,
+                            loadingBuilder:
+                                (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                },
+                            errorBuilder: (_, __, ___) {
+                              return Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  'No se pudo cargar la imagen del comprobante',
+                                  textAlign: TextAlign.center,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Toca la imagen para verla en grande y hacer zoom',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ] else if (
+                    receiptSource != null && receiptSource.isNotEmpty
+                  ) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'El comprobante adjunto no es una imagen previsualizable.',
+                    ),
+                  ],
+                  if (appointment.depositSlipAttachmentUrl?.isNotEmpty == true) ...[
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      'URL: ${appointment.depositSlipAttachmentUrl}',
+                    ),
+                  ],
+                  if (appointment.depositSlipAttachmentPath?.isNotEmpty == true) ...[
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      'Ruta: ${appointment.depositSlipAttachmentPath}',
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -558,6 +683,110 @@ class _PatientAppointmentDetailScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _loadAppointmentDetail() async {
+    setState(() => _isLoadingDetail = true);
+    try {
+      final repository = ref.read(appointmentsRepositoryProvider);
+      final detailed = await repository.fetchAppointmentDetail(
+        appointmentId: widget.appointment.id,
+      );
+      if (!mounted) return;
+      setState(() => _detailedAppointment = detailed);
+    } catch (_) {
+      // Keep fallback data from appointments list when detail fetch fails.
+    } finally {
+      if (mounted) setState(() => _isLoadingDetail = false);
+    }
+  }
+
+  Uri? _resolveAttachmentUri(String? rawPath) {
+    if (rawPath == null || rawPath.isEmpty) return null;
+
+    final parsed = Uri.tryParse(rawPath);
+    if (parsed != null && parsed.hasScheme) {
+      return parsed;
+    }
+
+    final base = Uri.tryParse(AppConfig.apiBaseUrl);
+    if (base == null) {
+      return null;
+    }
+
+    final normalizedPath = _normalizeAttachmentPath(rawPath);
+    return base.resolveUri(Uri.parse(normalizedPath));
+  }
+
+  String _normalizeAttachmentPath(String rawPath) {
+    final trimmed = rawPath.trim();
+    final withoutLeadingSlash = trimmed.startsWith('/')
+        ? trimmed.substring(1)
+        : trimmed;
+
+    if (withoutLeadingSlash.startsWith('storage/')) {
+      return '/$withoutLeadingSlash';
+    }
+
+    if (withoutLeadingSlash.startsWith('attachments/')) {
+      return '/storage/$withoutLeadingSlash';
+    }
+
+    return trimmed.startsWith('/') ? trimmed : '/$trimmed';
+  }
+
+  bool _isImageAttachment(String? path, String? mime) {
+    final normalizedMime = mime?.toLowerCase().trim();
+    if (normalizedMime != null && normalizedMime.isNotEmpty) {
+      return normalizedMime.startsWith('image/');
+    }
+
+    if (path == null || path.isEmpty) return false;
+    final normalizedPath = path.toLowerCase();
+    return normalizedPath.endsWith('.png') ||
+        normalizedPath.endsWith('.jpg') ||
+        normalizedPath.endsWith('.jpeg') ||
+        normalizedPath.endsWith('.webp') ||
+        normalizedPath.endsWith('.gif');
+  }
+
+  Future<void> _showReceiptPreview({
+    required BuildContext context,
+    required String imageUrl,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: const Text('Comprobante'),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'No se pudo abrir la imagen del comprobante',
+                      style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

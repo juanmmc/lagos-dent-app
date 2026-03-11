@@ -291,8 +291,8 @@ class DoctorAgendaController extends Notifier<DoctorAgendaState> {
 
     try {
       await operation();
-      await loadAgenda();
       state = state.copyWith(isActionLoading: false, success: successMessage);
+      Future<void>.microtask(loadAgenda);
     } catch (error) {
       state = state.copyWith(
         isActionLoading: false,
