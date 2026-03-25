@@ -78,6 +78,20 @@ class AppointmentsRepository {
     return _remote.fetchAssociatesForPatient(patientId: patientId);
   }
 
+  Future<PatientOption> createAssociatedPatient({
+    required String titularPatientId,
+    required String name,
+    required String phone,
+    required String birthdate,
+  }) {
+    return _remote.createAssociatedPatient(
+      titularPatientId: titularPatientId,
+      name: name,
+      phone: phone,
+      birthdate: birthdate,
+    );
+  }
+
   Future<void> createAppointment({
     required String patientId,
     required String doctorId,

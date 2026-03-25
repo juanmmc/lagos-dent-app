@@ -15,7 +15,7 @@ class LagosLogo extends StatelessWidget {
       child: Image.asset(
         'assets/images/logo.webp',
         fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) {
+        errorBuilder: (_, _, _) {
           return Container(
             color: AppColors.primary,
             child: const Icon(

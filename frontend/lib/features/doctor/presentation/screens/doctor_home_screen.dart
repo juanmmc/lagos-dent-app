@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -381,7 +380,7 @@ class _DoctorAppointmentDetailScreenState
                                     child: CircularProgressIndicator(),
                                   );
                                 },
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return Container(
                                 color: Theme.of(context).colorScheme.surface,
                                 alignment: Alignment.center,
@@ -481,7 +480,7 @@ class _DoctorAppointmentDetailScreenState
                                     child: CircularProgressIndicator(),
                                   );
                                 },
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return Container(
                                 color: Theme.of(context).colorScheme.surface,
                                 alignment: Alignment.center,
@@ -618,7 +617,10 @@ class _DoctorAppointmentDetailScreenState
               onPressed: agendaState.isActionLoading
                   ? null
                   : () async {
-                      final reschedule = await _askRescheduleData(context);
+                      final reschedule = await _askRescheduleData(
+                        context,
+                        loadAvailableSlots: _fetchAvailableSlotsForDate,
+                      );
                       if (!context.mounted || reschedule == null) return;
                       await controller.rescheduleAppointment(
                         appointmentId: appointment.id,
@@ -642,6 +644,7 @@ class _DoctorAppointmentDetailScreenState
       final file = await FilePicker.platform.pickFiles(withData: true);
       final selected = file?.files.single;
       if (selected == null) return;
+      if (!mounted) return;
       if (selected.size > _maxAttachmentSizeBytes) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('La receta no debe superar 5MB')),
@@ -693,6 +696,28 @@ class _DoctorAppointmentDetailScreenState
   void _refreshDetailInBackground() {
     if (!mounted || _isLoadingDetail) return;
     Future<void>.microtask(_loadAppointmentDetail);
+  }
+
+  Future<List<TimeOfDay>> _fetchAvailableSlotsForDate(DateTime date) async {
+    try {
+      final repository = ref.read(appointmentsRepositoryProvider);
+      final rawSlots = await repository.fetchAvailability(date: date);
+
+      final slots =
+          rawSlots
+              .map((slot) => slot.toLocal())
+              .map((slot) => TimeOfDay(hour: slot.hour, minute: slot.minute))
+              .toSet()
+              .toList()
+            ..sort(
+              (a, b) => (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute),
+            );
+
+      return slots;
+    } catch (error) {
+      final repository = ref.read(appointmentsRepositoryProvider);
+      throw StateError(repository.resolveErrorMessage(error));
+    }
   }
 
   bool _shouldPreferAgendaAppointment({
@@ -805,7 +830,7 @@ class _DoctorAppointmentDetailScreenState
                 imageUrl,
                 headers: headers,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) {
+                errorBuilder: (_, _, _) {
                   return const Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
@@ -893,9 +918,16 @@ Future<String?> _askRequiredText(
   return result;
 }
 
-Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
+Future<(DateTime, String?)?> _askRescheduleData(
+  BuildContext context, {
+  required Future<List<TimeOfDay>> Function(DateTime date)
+  loadAvailableSlots,
+}) async {
   DateTime? selectedDate;
   TimeOfDay? selectedTime;
+  List<TimeOfDay> availableSlots = const [];
+  bool isLoadingAvailability = false;
+  String? availabilityError;
   String reasonValue = '';
 
   final value = await showDialog<(DateTime, String?)>(
@@ -917,7 +949,31 @@ Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
                   lastDate: DateTime(now.year + 2),
                 );
                 if (picked == null) return;
-                setState(() => selectedDate = picked);
+                setState(() {
+                  selectedDate = picked;
+                  selectedTime = null;
+                  availableSlots = const [];
+                  availabilityError = null;
+                  isLoadingAvailability = true;
+                });
+
+                try {
+                  final slots = await loadAvailableSlots(picked);
+                  setState(() {
+                    availableSlots = slots;
+                    isLoadingAvailability = false;
+                  });
+                } catch (error) {
+                  final message =
+                      error is StateError
+                      ? error.message.toString()
+                      : 'No se pudo consultar la disponibilidad';
+                  setState(() {
+                    availableSlots = const [];
+                    isLoadingAvailability = false;
+                    availabilityError = message;
+                  });
+                }
               },
               icon: const Icon(Icons.event_rounded),
               label: Text(
@@ -927,22 +983,58 @@ Future<(DateTime, String?)?> _askRescheduleData(BuildContext context) async {
               ),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final picked = await showTimePicker(
-                  context: context,
-                  initialTime: selectedTime ?? TimeOfDay.now(),
-                );
-                if (picked == null) return;
-                setState(() => selectedTime = picked);
-              },
-              icon: const Icon(Icons.schedule_rounded),
-              label: Text(
-                selectedTime == null
-                    ? 'Seleccionar hora'
-                    : selectedTime!.format(context),
+            if (selectedDate == null)
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.schedule_rounded),
+                title: Text('Primero selecciona una fecha'),
+              )
+            else if (isLoadingAvailability)
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                title: Text('Consultando horas disponibles...'),
+              )
+            else if (availabilityError != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.error_outline),
+                title: Text(availabilityError!),
+              )
+            else if (availableSlots.isEmpty)
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.event_busy_outlined),
+                title: Text('No hay horas disponibles en esta fecha'),
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    selectedTime == null
+                        ? 'Selecciona una hora'
+                        : 'Hora seleccionada: ${selectedTime!.format(context)}',
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: availableSlots.map((slot) {
+                      final selected = selectedTime == slot;
+                      return ChoiceChip(
+                        label: Text(slot.format(context)),
+                        selected: selected,
+                        onSelected: (_) => setState(() => selectedTime = slot),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
-            ),
             const SizedBox(height: 8),
             TextField(
               onChanged: (value) => reasonValue = value,

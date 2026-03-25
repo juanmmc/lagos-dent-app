@@ -16,6 +16,7 @@ class PatientAppointmentsState {
   const PatientAppointmentsState({
     this.isLoading = false,
     this.isSubmitting = false,
+    this.isCreatingAssociate = false,
     this.isLoadingAvailability = false,
     this.isUploadingReceipt = false,
     this.appointments = const [],
@@ -37,6 +38,7 @@ class PatientAppointmentsState {
 
   final bool isLoading;
   final bool isSubmitting;
+  final bool isCreatingAssociate;
   final bool isLoadingAvailability;
   final bool isUploadingReceipt;
   final List<Appointment> appointments;
@@ -58,6 +60,7 @@ class PatientAppointmentsState {
   PatientAppointmentsState copyWith({
     bool? isLoading,
     bool? isSubmitting,
+    bool? isCreatingAssociate,
     bool? isLoadingAvailability,
     bool? isUploadingReceipt,
     List<Appointment>? appointments,
@@ -87,6 +90,7 @@ class PatientAppointmentsState {
     return PatientAppointmentsState(
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+        isCreatingAssociate: isCreatingAssociate ?? this.isCreatingAssociate,
       isLoadingAvailability:
           isLoadingAvailability ?? this.isLoadingAvailability,
       isUploadingReceipt: isUploadingReceipt ?? this.isUploadingReceipt,
@@ -254,6 +258,52 @@ class PatientAppointmentsController extends Notifier<PatientAppointmentsState> {
       clearError: true,
       clearSuccess: true,
     );
+  }
+
+  Future<bool> createAssociatedPatient({
+    required String name,
+    required String phone,
+    required String birthdate,
+  }) async {
+    final auth = ref.read(authControllerProvider).session;
+    if (auth == null) {
+      state = state.copyWith(error: 'Sesion no disponible');
+      return false;
+    }
+
+    state = state.copyWith(
+      isCreatingAssociate: true,
+      clearError: true,
+      clearSuccess: true,
+    );
+
+    try {
+      final created = await _repository.createAssociatedPatient(
+        titularPatientId: auth.profileId,
+        name: name,
+        phone: phone,
+        birthdate: birthdate,
+      );
+
+      final associates = await _repository.fetchAssociatesForPatient(
+        patientId: auth.profileId,
+      );
+
+      state = state.copyWith(
+        isCreatingAssociate: false,
+        associatedPatients: associates,
+        forAssociatedPatient: true,
+        associatedPatientId: created.id,
+        success: 'Paciente asociado registrado correctamente',
+      );
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isCreatingAssociate: false,
+        error: _repository.resolveErrorMessage(error),
+      );
+      return false;
+    }
   }
 
   Future<void> uploadPaymentReceipt(PlatformFile file) async {

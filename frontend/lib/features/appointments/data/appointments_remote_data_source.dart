@@ -169,6 +169,25 @@ class AppointmentsRemoteDataSource {
         .toList();
   }
 
+  Future<PatientOption> createAssociatedPatient({
+    required String titularPatientId,
+    required String name,
+    required String phone,
+    required String birthdate,
+  }) async {
+    final response = await _dio.post<dynamic>(
+      '/api/patients',
+      data: {
+        'phone': phone,
+        'name': name,
+        'birthdate': birthdate,
+        'titular_patient_id': titularPatientId,
+      },
+    );
+
+    return PatientOption.fromJson(_extractItem(response.data));
+  }
+
   Future<void> createAppointment({
     required String patientId,
     required String doctorId,

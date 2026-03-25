@@ -209,6 +209,38 @@ class _PatientBookingFlowView extends ConsumerWidget {
                 ),
                 if (state.forAssociatedPatient) ...[
                   const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: state.isCreatingAssociate
+                          ? null
+                          : () async {
+                              final associate =
+                                  await _askNewAssociatedPatientData(context);
+                              if (!context.mounted || associate == null) {
+                                return;
+                              }
+
+                              await controller.createAssociatedPatient(
+                                name: associate.$1,
+                                phone: associate.$2,
+                                birthdate: associate.$3,
+                              );
+                            },
+                      icon: state.isCreatingAssociate
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.person_add_alt_1_rounded),
+                      label: Text(
+                        state.isCreatingAssociate
+                            ? 'Agregando...'
+                            : 'Agregar asociado',
+                      ),
+                    ),
+                  ),
                   DropdownButtonFormField<String>(
                     initialValue:
                         state.associatedPatients
@@ -222,7 +254,7 @@ class _PatientBookingFlowView extends ConsumerWidget {
                     decoration: InputDecoration(
                       labelText: 'Paciente asociado',
                       helperText: state.associatedPatients.isEmpty
-                          ? 'No se encontraron pacientes asociados para este titular'
+                        ? 'No hay asociados. Usa "Agregar asociado" para registrar uno.'
                           : null,
                     ),
                     items: state.associatedPatients
@@ -448,6 +480,138 @@ class _PatientBookingFlowView extends ConsumerWidget {
   }
 }
 
+Future<(String, String, String)?> _askNewAssociatedPatientData(
+  BuildContext context,
+) async {
+  return showDialog<(String, String, String)>(
+    context: context,
+    builder: (_) => const _NewAssociatedPatientDialog(),
+  );
+}
+
+class _NewAssociatedPatientDialog extends StatefulWidget {
+  const _NewAssociatedPatientDialog();
+
+  @override
+  State<_NewAssociatedPatientDialog> createState() =>
+      _NewAssociatedPatientDialogState();
+}
+
+class _NewAssociatedPatientDialogState extends State<_NewAssociatedPatientDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  String? _birthdate;
+  String? _validationMessage;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickBirthdate() async {
+    final selected = await showDatePicker(
+      context: context,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      initialDate: DateTime(2000),
+    );
+    if (!mounted || selected == null) return;
+
+    final formatted =
+        '${selected.year.toString().padLeft(4, '0')}-${selected.month.toString().padLeft(2, '0')}-${selected.day.toString().padLeft(2, '0')}';
+    setState(() {
+      _birthdate = formatted;
+      _validationMessage = null;
+    });
+  }
+
+  void _submit() {
+    final valid = _formKey.currentState?.validate() ?? false;
+    if (!valid) return;
+
+    final date = _birthdate?.trim() ?? '';
+    if (date.isEmpty) {
+      setState(() {
+        _validationMessage =
+            'Selecciona la fecha de nacimiento del asociado';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop((
+      _nameController.text.trim(),
+      _phoneController.text.trim(),
+      date,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Agregar paciente asociado'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: 'Nombre completo'),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Ingresa el nombre'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: 'Telefono'),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Ingresa el telefono'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _pickBirthdate,
+                icon: const Icon(Icons.calendar_today_rounded),
+                label: Text(
+                  _birthdate == null
+                      ? 'Seleccionar fecha de nacimiento'
+                      : 'Nacimiento: $_birthdate',
+                ),
+              ),
+              if (_validationMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _validationMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Guardar asociado'),
+        ),
+      ],
+    );
+  }
+}
+
 class _StepHeader extends StatelessWidget {
   const _StepHeader({required this.number, required this.text});
 
@@ -603,7 +767,7 @@ class _PatientAppointmentDetailScreenState
                                     child: CircularProgressIndicator(),
                                   );
                                 },
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return Container(
                                 color: Theme.of(context).colorScheme.surface,
                                 alignment: Alignment.center,
@@ -702,7 +866,7 @@ class _PatientAppointmentDetailScreenState
                                     child: CircularProgressIndicator(),
                                   );
                                 },
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return Container(
                                 color: Theme.of(context).colorScheme.surface,
                                 alignment: Alignment.center,
@@ -822,7 +986,7 @@ class _PatientAppointmentDetailScreenState
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) {
+                errorBuilder: (_, _, _) {
                   return const Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
