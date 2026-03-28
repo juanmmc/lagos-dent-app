@@ -53,9 +53,15 @@ class AppointmentController extends Controller
         if (!$request->user() || !$request->user()->tokenCan('patient')) {
             return response()->json(['message' => 'No autorizado'], 403);
         }
+
+        $associatedIds = PatientRelation::where('titular_patient_id', $patientId)
+            ->pluck('associated_patient_id');
+
+        $patientIds = $associatedIds->prepend($patientId);
+
         $order = $request->input('order', 'desc');
         $appointments = Appointment::with(['doctor.person', 'patient.person'])
-            ->where('patient_id', $patientId)
+            ->whereIn('patient_id', $patientIds)
             ->orderBy('scheduled_at', $order)
             ->get();
         return response()->json(AppointmentResource::collection($appointments));
@@ -82,6 +88,14 @@ class AppointmentController extends Controller
             }
             if (Appointment::where('scheduled_at', $data['scheduled_at'])->exists()) {
                 return response()->json(['message' => 'El horario ya está ocupado'], 422);
+            }
+
+            $hasFutureAppointment = Appointment::where('patient_id', $data['patient_id'])
+                ->where('scheduled_at', '>', now())
+                ->where('status', '!=', AppointmentStatus::Rejected)
+                ->exists();
+            if ($hasFutureAppointment) {
+                return response()->json(['message' => 'El paciente ya tiene una cita activa pendiente'], 422);
             }
 
             $appointment = Appointment::create([
@@ -134,6 +148,14 @@ class AppointmentController extends Controller
         return DB::transaction(function () use ($data, $user) {
             if (Appointment::where('scheduled_at', $data['scheduled_at'])->exists()) {
                 return response()->json(['message' => 'El horario ya está ocupado'], 422);
+            }
+
+            $hasFutureAppointment = Appointment::where('patient_id', $data['patient_id'])
+                ->where('scheduled_at', '>', now())
+                ->where('status', '!=', AppointmentStatus::Rejected)
+                ->exists();
+            if ($hasFutureAppointment) {
+                return response()->json(['message' => 'El paciente ya tiene una cita activa pendiente'], 422);
             }
 
             $appointment = Appointment::create([
