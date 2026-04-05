@@ -17,7 +17,9 @@ class Appointment {
     this.depositSlipAttachmentPath,
     this.depositSlipAttachmentMime,
     this.recipeAttachmentId,
+    this.recipeAttachmentUrl,
     this.recipeAttachmentPath,
+    this.recipeAttachmentMime,
     this.rejectionReason,
   });
 
@@ -39,7 +41,9 @@ class Appointment {
   final String? depositSlipAttachmentPath;
   final String? depositSlipAttachmentMime;
   final String? recipeAttachmentId;
+  final String? recipeAttachmentUrl;
   final String? recipeAttachmentPath;
+  final String? recipeAttachmentMime;
   final String? rejectionReason;
 
   static const int pendingConfirmationStatusValue = 1;
@@ -151,10 +155,20 @@ class Appointment {
       recipeAttachmentId: _nullableString(
         json['recipe_attachment_id'] ?? json['recipeAttachmentId'],
       ),
+      recipeAttachmentUrl: _nullableString(
+        json['recipe_attachment_url'] ??
+            json['recipeAttachmentUrl'] ??
+            json['recipe_attachment']?['url'],
+      ),
       recipeAttachmentPath: _nullableString(
         json['recipe_attachment_path'] ??
             json['recipeAttachmentPath'] ??
             json['recipe_attachment']?['path'],
+      ),
+      recipeAttachmentMime: _nullableString(
+        json['recipe_attachment_mime'] ??
+            json['recipeAttachmentMime'] ??
+            json['recipe_attachment']?['mime'],
       ),
       rejectionReason: _nullableString(
         json['rejection_reason'] ?? json['rejectionReason'],

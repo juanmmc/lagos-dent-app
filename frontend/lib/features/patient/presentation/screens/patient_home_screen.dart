@@ -665,6 +665,9 @@ class _PatientAppointmentDetailScreenState
   @override
   Widget build(BuildContext context) {
     final appointment = _detailedAppointment ?? widget.appointment;
+    final authToken = ref.watch(
+      authControllerProvider.select((state) => state.session?.token),
+    );
     final dateText = DateFormat(
       'dd/MM/yyyy HH:mm',
     ).format(appointment.scheduledAt);
@@ -680,10 +683,19 @@ class _PatientAppointmentDetailScreenState
     final receiptUri = _resolveAttachmentUri(receiptSource);
     final canPreviewReceipt =
       receiptUri != null && _isImageAttachment(receiptSource, receiptMime);
+    final recipeUrl = appointment.recipeAttachmentUrl?.trim();
     final recipePath = appointment.recipeAttachmentPath?.trim();
-    final recipeUri = _resolveAttachmentUri(recipePath);
+    final recipeMime = appointment.recipeAttachmentMime?.trim();
+    final recipeSource =
+      recipeUrl != null && recipeUrl.isNotEmpty ? recipeUrl : recipePath;
+    final hasRecipeAttachment =
+      recipeSource != null && recipeSource.isNotEmpty;
+    final recipeUri = _resolveAttachmentUri(recipeSource);
     final canPreviewRecipe =
-        recipeUri != null && _isImageAttachment(recipePath, null);
+      recipeUri != null && _isImageAttachment(recipeSource, recipeMime);
+    final imageHeaders = authToken == null || authToken.isEmpty
+        ? null
+        : <String, String>{'Authorization': 'Bearer $authToken'};
     final diagnosisText = appointment.diagnosis?.trim().isNotEmpty == true
         ? appointment.diagnosis!.trim()
         : 'Pendiente';
@@ -751,7 +763,7 @@ class _PatientAppointmentDetailScreenState
                   const SizedBox(height: 8),
                   Text(
                     appointment.depositSlipAttachmentId?.isNotEmpty == true
-                        ? 'Adjunto ID: ${appointment.depositSlipAttachmentId}'
+                        ? 'Comprobante adjunto'
                         : 'No hay comprobante adjunto en esta cita.',
                   ),
                   if (canPreviewReceipt) ...[
@@ -761,6 +773,7 @@ class _PatientAppointmentDetailScreenState
                       onTap: () => _showReceiptPreview(
                         context: context,
                         imageUrl: receiptUri.toString(),
+                        headers: imageHeaders,
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
@@ -768,6 +781,7 @@ class _PatientAppointmentDetailScreenState
                           aspectRatio: 16 / 10,
                           child: Image.network(
                             receiptUri.toString(),
+                            headers: imageHeaders,
                             fit: BoxFit.cover,
                             loadingBuilder:
                                 (context, child, loadingProgress) {
@@ -801,18 +815,6 @@ class _PatientAppointmentDetailScreenState
                     const SizedBox(height: 8),
                     const Text(
                       'El comprobante adjunto no es una imagen previsualizable.',
-                    ),
-                  ],
-                  if (appointment.depositSlipAttachmentUrl?.isNotEmpty == true) ...[
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      'URL: ${appointment.depositSlipAttachmentUrl}',
-                    ),
-                  ],
-                  if (appointment.depositSlipAttachmentPath?.isNotEmpty == true) ...[
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      'Ruta: ${appointment.depositSlipAttachmentPath}',
                     ),
                   ],
                 ],
@@ -852,7 +854,11 @@ class _PatientAppointmentDetailScreenState
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(prescriptionText),
+                  Text(
+                    appointment.prescription?.trim().isNotEmpty == true
+                        ? appointment.prescription!.trim()
+                    : (hasRecipeAttachment ? 'Receta adjunta' : 'Pendiente'),
+                  ),
                   if (canPreviewRecipe) ...[
                     const SizedBox(height: 12),
                     InkWell(
@@ -860,6 +866,7 @@ class _PatientAppointmentDetailScreenState
                       onTap: () => _showReceiptPreview(
                         context: context,
                         imageUrl: recipeUri.toString(),
+                        headers: imageHeaders,
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
@@ -867,6 +874,7 @@ class _PatientAppointmentDetailScreenState
                           aspectRatio: 16 / 10,
                           child: Image.network(
                             recipeUri.toString(),
+                            headers: imageHeaders,
                             fit: BoxFit.cover,
                             loadingBuilder:
                                 (context, child, loadingProgress) {
@@ -894,7 +902,7 @@ class _PatientAppointmentDetailScreenState
                       'Toca la imagen para verla en grande y hacer zoom',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ] else if (recipePath != null && recipePath.isNotEmpty) ...[
+                  ] else if (recipeSource != null && recipeSource.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     const Text(
                       'El adjunto de receta no es una imagen previsualizable.',
@@ -930,7 +938,8 @@ class _PatientAppointmentDetailScreenState
 
     final parsed = Uri.tryParse(rawPath);
     if (parsed != null && parsed.hasScheme) {
-      return parsed;
+      final rewritten = _rewriteLocalhostUriIfNeeded(parsed);
+      return rewritten;
     }
 
     final base = Uri.tryParse(AppConfig.apiBaseUrl);
@@ -940,6 +949,22 @@ class _PatientAppointmentDetailScreenState
 
     final normalizedPath = _normalizeAttachmentPath(rawPath);
     return base.resolveUri(Uri.parse(normalizedPath));
+  }
+
+  Uri _rewriteLocalhostUriIfNeeded(Uri uri) {
+    final host = uri.host.toLowerCase();
+    if (host != 'localhost' && host != '127.0.0.1') {
+      return uri;
+    }
+
+    final base = Uri.tryParse(AppConfig.apiBaseUrl);
+    if (base == null || base.host.isEmpty) return uri;
+
+    return uri.replace(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : uri.port,
+    );
   }
 
   String _normalizeAttachmentPath(String rawPath) {
@@ -977,6 +1002,7 @@ class _PatientAppointmentDetailScreenState
   Future<void> _showReceiptPreview({
     required BuildContext context,
     required String imageUrl,
+    Map<String, String>? headers,
   }) {
     return showDialog<void>(
       context: context,
@@ -994,6 +1020,7 @@ class _PatientAppointmentDetailScreenState
               maxScale: 5,
               child: Image.network(
                 imageUrl,
+                headers: headers,
                 fit: BoxFit.contain,
                 errorBuilder: (_, _, _) {
                   return const Padding(

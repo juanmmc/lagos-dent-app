@@ -289,10 +289,17 @@ class _DoctorAppointmentDetailScreenState
         ? null
         : <String, String>{'Authorization': 'Bearer $authToken'};
 
+    final recipeUrl = appointment.recipeAttachmentUrl?.trim();
     final recipePath = appointment.recipeAttachmentPath?.trim();
-    final recipeUri = _resolveAttachmentUri(recipePath);
+    final recipeMime = appointment.recipeAttachmentMime?.trim();
+    final recipeSource = recipeUrl != null && recipeUrl.isNotEmpty
+        ? recipeUrl
+        : recipePath;
+    final hasRecipeAttachment =
+      recipeSource != null && recipeSource.isNotEmpty;
+    final recipeUri = _resolveAttachmentUri(recipeSource);
     final canPreviewRecipe =
-        recipeUri != null && _isImageAttachment(recipePath, null);
+        recipeUri != null && _isImageAttachment(recipeSource, recipeMime);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Detalle de cita')),
@@ -355,7 +362,7 @@ class _DoctorAppointmentDetailScreenState
                   const SizedBox(height: 8),
                   Text(
                     appointment.depositSlipAttachmentId?.isNotEmpty == true
-                        ? 'Adjunto ID: ${appointment.depositSlipAttachmentId}'
+                        ? 'Comprobante adjunto'
                         : 'No hay comprobante adjunto en esta cita.',
                   ),
                   if (canPreviewReceipt) ...[
@@ -407,20 +414,6 @@ class _DoctorAppointmentDetailScreenState
                       'El comprobante adjunto no es una imagen previsualizable.',
                     ),
                   ],
-                  if (appointment.depositSlipAttachmentUrl?.isNotEmpty ==
-                      true) ...[
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      'URL: ${appointment.depositSlipAttachmentUrl}',
-                    ),
-                  ],
-                  if (appointment.depositSlipAttachmentPath?.isNotEmpty ==
-                      true) ...[
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      'Ruta: ${appointment.depositSlipAttachmentPath}',
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -455,7 +448,7 @@ class _DoctorAppointmentDetailScreenState
                   Text(
                     appointment.prescription?.trim().isNotEmpty == true
                         ? appointment.prescription!.trim()
-                        : 'Pendiente',
+                    : (hasRecipeAttachment ? 'Receta adjunta' : 'Pendiente'),
                   ),
                   if (canPreviewRecipe) ...[
                     const SizedBox(height: 12),
@@ -499,7 +492,8 @@ class _DoctorAppointmentDetailScreenState
                       'Toca la imagen para verla en grande y hacer zoom',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ] else if (recipePath != null && recipePath.isNotEmpty) ...[
+                  ] else if (recipeSource != null &&
+                      recipeSource.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     const Text(
                       'El adjunto de receta no es una imagen previsualizable.',
