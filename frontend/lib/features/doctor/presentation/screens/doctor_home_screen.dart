@@ -295,8 +295,6 @@ class _DoctorAppointmentDetailScreenState
     final recipeSource = recipeUrl != null && recipeUrl.isNotEmpty
         ? recipeUrl
         : recipePath;
-    final hasRecipeAttachment =
-      recipeSource != null && recipeSource.isNotEmpty;
     final recipeUri = _resolveAttachmentUri(recipeSource);
     final canPreviewRecipe =
         recipeUri != null && _isImageAttachment(recipeSource, recipeMime);
@@ -446,9 +444,8 @@ class _DoctorAppointmentDetailScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    appointment.prescription?.trim().isNotEmpty == true
-                        ? appointment.prescription!.trim()
-                    : (hasRecipeAttachment ? 'Receta adjunta' : 'Pendiente'),
+                    appointment.recipeAttachmentId?.isNotEmpty == true
+                        ? 'Receta adjunta' : 'Pendiente',
                   ),
                   if (canPreviewRecipe) ...[
                     const SizedBox(height: 12),

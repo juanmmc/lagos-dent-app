@@ -688,8 +688,6 @@ class _PatientAppointmentDetailScreenState
     final recipeMime = appointment.recipeAttachmentMime?.trim();
     final recipeSource =
       recipeUrl != null && recipeUrl.isNotEmpty ? recipeUrl : recipePath;
-    final hasRecipeAttachment =
-      recipeSource != null && recipeSource.isNotEmpty;
     final recipeUri = _resolveAttachmentUri(recipeSource);
     final canPreviewRecipe =
       recipeUri != null && _isImageAttachment(recipeSource, recipeMime);
@@ -698,9 +696,6 @@ class _PatientAppointmentDetailScreenState
         : <String, String>{'Authorization': 'Bearer $authToken'};
     final diagnosisText = appointment.diagnosis?.trim().isNotEmpty == true
         ? appointment.diagnosis!.trim()
-        : 'Pendiente';
-    final prescriptionText = appointment.prescription?.trim().isNotEmpty == true
-        ? appointment.prescription!.trim()
         : 'Pendiente';
 
     return Scaffold(
@@ -855,9 +850,8 @@ class _PatientAppointmentDetailScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    appointment.prescription?.trim().isNotEmpty == true
-                        ? appointment.prescription!.trim()
-                    : (hasRecipeAttachment ? 'Receta adjunta' : 'Pendiente'),
+                    appointment.recipeAttachmentId?.isNotEmpty == true
+                        ? 'Receta adjunta' : 'Pendiente',
                   ),
                   if (canPreviewRecipe) ...[
                     const SizedBox(height: 12),
