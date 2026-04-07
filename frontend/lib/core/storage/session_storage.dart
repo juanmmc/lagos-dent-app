@@ -20,6 +20,7 @@ class SessionStorage {
   static const _roleKey = 'auth.role';
   static const _personIdKey = 'auth.personId';
   static const _profileIdKey = 'auth.profileId';
+  static const _deviceTokenKey = 'device.token';
 
   Future<void> save(AuthSession session) async {
     _cachedSession = session;
@@ -67,5 +68,18 @@ class SessionStorage {
     await _storage.delete(key: _roleKey);
     await _storage.delete(key: _personIdKey);
     await _storage.delete(key: _profileIdKey);
+  }
+
+  // Device Token methods
+  Future<void> saveDeviceToken(String token) async {
+    await _storage.write(key: _deviceTokenKey, value: token);
+  }
+
+  Future<String?> getDeviceToken() async {
+    return _storage.read(key: _deviceTokenKey);
+  }
+
+  Future<void> clearDeviceToken() async {
+    await _storage.delete(key: _deviceTokenKey);
   }
 }

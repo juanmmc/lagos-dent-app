@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/notifications/notification_manager.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/models/auth_session.dart';
@@ -43,11 +44,13 @@ class AuthState {
 class AuthController extends Notifier<AuthState> {
   late final AuthRepository _repository;
   late final SessionStorage _storage;
+  late final NotificationManager _notificationManager;
 
   @override
   AuthState build() {
     _repository = ref.watch(authRepositoryProvider);
     _storage = ref.watch(sessionStorageProvider);
+    _notificationManager = ref.watch(notificationManagerProvider);
     Future<void>.microtask(restoreSession);
     return const AuthState();
   }
@@ -77,6 +80,8 @@ class AuthController extends Notifier<AuthState> {
         isLoading: false,
         isInitialized: true,
       );
+      // Register device token after successful login
+      _notificationManager.registerDeviceTokenAfterLogin();
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -104,6 +109,8 @@ class AuthController extends Notifier<AuthState> {
         isLoading: false,
         isInitialized: true,
       );
+      // Register device token after successful login
+      _notificationManager.registerDeviceTokenAfterLogin();
       return true;
     } catch (error) {
       state = state.copyWith(
@@ -146,6 +153,8 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Deregister device token before logout
+    await _notificationManager.deregisterDeviceTokenOnLogout();
     await _storage.clear();
     state = state.copyWith(
       clearSession: true,

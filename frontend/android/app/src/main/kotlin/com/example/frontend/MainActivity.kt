@@ -1,4 +1,4 @@
-package com.example.frontend
+package com.lagosdent.app
 
 import com.mr.flutter.plugin.filepicker.FilePickerPlugin
 import io.flutter.embedding.android.FlutterActivity
