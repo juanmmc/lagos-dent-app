@@ -25,7 +25,7 @@ services:
     volumes:
       - attachments_data:/var/www/storage/app/public/attachments
       - type: bind
-        source: /opt/lagos-dent/secrets/lagos-dent-v1-firebase-adminsdk-fbsvc-402b69dd3a.json
+        source: /opt/lagos-dent-secrets/lagos-dent-v1-firebase-adminsdk-fbsvc-402b69dd3a.json
         target: /var/www/storage/app/private/firebase-admin.json
         read_only: true
     command: >
@@ -59,7 +59,7 @@ services:
     volumes:
       - attachments_data:/var/www/storage/app/public/attachments
       - type: bind
-        source: /opt/lagos-dent/secrets/lagos-dent-v1-firebase-adminsdk-fbsvc-402b69dd3a.json
+        source: /opt/lagos-dent-secrets/lagos-dent-v1-firebase-adminsdk-fbsvc-402b69dd3a.json
         target: /var/www/storage/app/private/firebase-admin.json
         read_only: true
     command: php artisan queue:work --tries=3 --timeout=90
